@@ -4,7 +4,6 @@
 
 *.pyc
 *.ipynb
-*.pkl
 
 *.DS_Store
 .idea*
