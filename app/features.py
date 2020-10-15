@@ -1,3 +1,3 @@
 # app/features.py
 
-FEATURES = ['INDUS', 'RM', 'AGE', 'DIS', 'NOX', 'PTRATIO']
+FEATURES = ['variance', 'skewness', 'curtosis', 'entropy']
