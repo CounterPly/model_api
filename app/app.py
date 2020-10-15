@@ -1,63 +1,107 @@
-# app/app.py
+# -*- coding: utf-8 -*-
 
-# Common python package imports.
-from flask import Flask, jsonify, request, render_template
-import pickle
+from flask import Flask, request
 import numpy as np
+import pickle
+import pandas as pd
+import flasgger
+from flasgger import Swagger
 
-# Import from model_api/app/features.py.
-from features import FEATURES
-
-
-# Initialize the app and set a secret_key.
 app = Flask(__name__)
-app.secret_key = 'something_secret'
 
-# Load the pickled model.
-MODEL = pickle.load(open('model.pkl', 'rb'))
+swagger_config = Swagger.DEFAULT_CONFIG
+swagger_config['swagger_ui_bundle_js'] = '//unpkg.com/swagger-ui-dist@3.3.0/swagger-ui-bundle.js'
+swagger_config['swagger_ui_standalone_preset_js'] = '//unpkg.com/swagger-ui-dist@3/swagger-ui-standalone-preset.js'
+swagger_config['jquery_js'] = '//unpkg.com/jquery@2.2.4/dist/jquery.min.js'
+swagger_config['swagger_ui_css'] = '//unpkg.com/swagger-ui-dist@3/swagger-ui.css'
+
+
+def create_swagger(app_):
+    template = {
+        "openapi": '3.0.0',
+        "info": {
+            "title": "Swagger API - Bentley Assignment",
+            "description": "OpenAPI 3.0 Specification for an Amazon EC2 Hosted ML Model",
+            "version": "1.0"
+        },
+        "basePath": "/",
+        "schemes": [
+            "http",
+            "https"
+        ]
+    }
+    return Swagger(app_, template=template)
+
+
+create_swagger(app)
+
+pickle_in = open("model.pkl", "rb")
+model = pickle.load(pickle_in)
 
 
 @app.route('/')
-def docs():
-    """Describe the model API inputs and outputs for users."""
-    return render_template('docs.html')
+def welcome():
+    return "Welcome All"
 
 
-@app.route('/api', methods=['GET'])
-def api():
-    """Handle request and output model score in json format."""
-    # Handle empty requests.
-    if not request.json:
-        return jsonify({'error': 'no request received'})
+@app.route('/predict', methods=["GET"])
+def predict():
+    """Enter feature data.
+    Input sample feature data to receive a prediction from the model.
+    ---
+    tags:
+      - name: Single Prediction
+    parameters:
+      - name: variance
+        in: query
+        type: number
+        required: true
+      - name: skewness
+        in: query
+        type: number
+        required: true
+      - name: curtosis
+        in: query
+        type: number
+        required: true
+      - name: entropy
+        in: query
+        type: number
+        required: true
+    responses:
+        200:
+            description: The output values
+    """
+    variance = request.args.get("variance")
+    skewness = request.args.get("skewness")
+    curtosis = request.args.get("curtosis")
+    entropy = request.args.get("entropy")
+    prediction = model.predict([[variance, skewness, curtosis, entropy]])
+    return str(prediction)
 
-    # Parse request args into feature array for prediction.
-    x_list, missing_data = parse_args(request.json)
-    x_array = np.array([x_list])
 
-    # Predict on x_array and return JSON response.
-    estimate = int(MODEL.predict(x_array)[0])
-    response = dict(ESTIMATE=estimate, MISSING_DATA=missing_data)
+@app.route('/predict_file', methods=["POST"])
+def predict_file(test_file):
+    """ Upload CSV File.
+    Upload a CSV File containing sample data to receive multiple predictions.
+    ---
+    tags:
+      - name: Bulk Prediction
+    parameters:
+      - name: file
+        in: formData
+        type: file
+        required: true
+    responses:
+        200:
+            description: The output values
+    """
+    df_test = pd.read_csv(request.files.get(test_file))
+    print(df_test.head())
+    prediction = model.predict(df_test)
 
-    return jsonify(response)
-
-
-def parse_args(request_dict):
-    """Parse model features from incoming requests formatted in JSON."""
-    # Initialize missing_data as False.
-    missing_data = False
-
-    # Parse out the features from the request_dict.
-    x_list = []
-    for feature in FEATURES:
-        value = request_dict.get(feature, None)
-        if value:
-            x_list.append(value)
-        else:
-            # Handle missing features.
-            x_list.append(0)
-            missing_data = True
-    return x_list, missing_data
+    return str(list(prediction))
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=8000)
